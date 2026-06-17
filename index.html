@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <title>Wallpaper Quotation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+    <header>
+        <div class="brand">
+            <div class="brand-logo">W</div>
+            <div>
+                <div class="brand-name">Wallpaper Studio</div>
+                <div class="brand-sub">Professional Quotation</div>
+            </div>
+        </div>
+        <div class="header-date" id="today-date"></div>
+    </header>
+
+    <div class="page">
+
+        <!-- Customer Info -->
+        <div class="card">
+            <div class="card-title">Customer Details</div>
+            <div class="cust-grid">
+                <div class="field-wrap">
+                    <label>Customer Name</label>
+                    <input type="text" id="cust-name" placeholder="Full name" />
+                </div>
+                <div class="field-wrap">
+                    <label>Phone Number</label>
+                    <input type="text" id="cust-phone" placeholder="+91 00000 00000" />
+                </div>
+                <div class="field-wrap">
+                    <label>Address</label>
+                    <input type="text" id="quote-no" placeholder="" />
+                </div>
+            </div>
+        </div>
+
+        <!-- Rooms -->
+        <div id="rooms-wrap"></div>
+
+        <button class="add-room-btn" onclick="addRoom()">+ Add Room</button>
+
+        <!-- Summary -->
+        <div class="card">
+            <div class="card-title">Bill Summary</div>
+            <div id="summary-rooms"></div>
+            <div class="summary-footer">
+                <div class="summary-totals">
+                    <div class="sum-row">
+                        <span>Total Area</span>
+                        <span id="grand-sqft">0.000 sq ft</span>
+                    </div>
+                    <div class="sum-row grand">
+                        <span>Grand Total</span>
+                        <span id="grand-total">Rs. 0.00</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="action-row">
+            <button class="btn btn-primary" onclick="saveQuote()">Save Quote</button>
+            <button class="btn btn-outline" onclick="showBill()">Preview Bill</button>
+            <button class="btn btn-ghost" onclick="clearAll()">Clear All</button>
+        </div>
+
+        <!-- History -->
+        <div class="card" style="margin-top:12px;">
+            <div class="card-title">Quote History</div>
+            <div id="history-list">
+                <p class="empty-msg">No saved quotes yet.</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Bill Modal -->
+    <div id="bill-modal">
+        <div class="modal-bg" onclick="closeBill()"></div>
+        <div class="modal-box">
+            <button class="modal-close" onclick="closeBill()">&times;</button>
+            <div id="bill-content"></div>
+            <button class="btn btn-primary" style="width:100%;margin-top:16px;" onclick="window.print()">Download /
+                Print</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
