@@ -54,7 +54,7 @@ function addRoom(saved) {
     <div class="room-body" id="body-${rid}">
       <div id="walls-${rid}"></div>
       <div class="add-wall-area">
-        <button class="add-wall-btn" onclick="addWall(${rid})">+ Add Wall</button>
+        <button class="add-wall-btn" onclick="addWall(${rid})">Add Wall</button>
       </div>
       <div class="room-footer">
         <div>
@@ -79,7 +79,6 @@ function addRoom(saved) {
 }
 
 // ── ADD WALL ──────────────────────────────────────────────
-// Paper Quality is room-level only — walls just have width, height, rate
 function addWall(rid, saved) {
   wallCounters[rid] = (wallCounters[rid] || 0) + 1;
   const wid = wallCounters[rid];
@@ -92,8 +91,11 @@ function addWall(rid, saved) {
   div.innerHTML = `
     <div class="wall-top">
       <div class="wall-badge">Wall ${wid}</div>
-      ${wid > 1 ? `<button class="wall-del-btn" onclick="removeWall(${rid},${wid})" title="Remove wall">&times;</button>` : ''}
+      ${wid > 1
+      ? `<button class="wall-del-btn" onclick="removeWall(${rid},${wid})" title="Remove wall">&times;</button>`
+      : ''}
     </div>
+
     <div class="wall-dims">
       <div class="dim-field">
         <label>Width (inch)</label>
@@ -106,12 +108,22 @@ function addWall(rid, saved) {
           value="${d.height || ''}" oninput="calcWall(${rid},${wid})"/>
       </div>
     </div>
+
     <div class="sqft-row">
       <div class="sqft-pill" id="pill-${rid}-${wid}">
         <span class="sqft-num" id="wsqft-${rid}-${wid}">--</span>
         <span class="sqft-unit">sq ft</span>
       </div>
     </div>
+
+    <div class="pattern-section">
+      <div class="pattern-section-label">Pattern Number</div>
+      <div class="pattern-field">
+        <input type="text" id="pnum-${rid}-${wid}" placeholder="e.g. WP-2024"
+          value="${d.patternNum || ''}"/>
+      </div>
+    </div>
+
     <div class="rate-row">
       <label>Rate (Rs./sq ft)</label>
       <input type="number" id="rate-${rid}-${wid}" placeholder="0" min="0" step="0.01"
@@ -174,9 +186,38 @@ function getRoomWalls(rid) {
     const rate = parseFloat(document.getElementById(`rate-${rid}-${wid}`)?.value) || 0;
     const amt = sqft * rate;
     const paper = document.getElementById(`room-paper-${rid}`)?.value || '';
-    walls.push({ wid, width: w, height: h, sqft, rate, amt, paper });
+    const patternNum = document.getElementById(`pnum-${rid}-${wid}`)?.value || '';
+    walls.push({ wid, width: w, height: h, sqft, rate, amt, paper, patternNum });
   });
   return walls;
+}
+
+// ── UPDATE BALANCE ────────────────────────────────────────
+function updateBalance() {
+  const grandTotalText = document.getElementById('grand-total')?.textContent || 'Rs. 0.00';
+  const grandTotal = parseFloat(grandTotalText.replace('Rs.', '').replace(/,/g, '').trim()) || 0;
+  const advance = parseFloat(document.getElementById('advance-amount')?.value) || 0;
+  const balance = grandTotal - advance;
+
+  const balVal = document.getElementById('balance-val');
+  const balNote = document.getElementById('balance-note');
+
+  if (balVal) {
+    balVal.textContent = 'Rs. ' + Math.abs(balance).toFixed(2);
+    if (balance < 0) {
+      balVal.className = 'balance-val overdue';
+      balVal.style.color = '';
+      if (balNote) balNote.textContent = 'Advance exceeds total';
+    } else if (balance === 0) {
+      balVal.className = 'balance-val';
+      balVal.style.color = 'var(--green)';
+      if (balNote) balNote.textContent = 'Fully paid';
+    } else {
+      balVal.className = 'balance-val';
+      balVal.style.color = 'var(--green)';
+      if (balNote) balNote.textContent = '';
+    }
+  }
 }
 
 // ── RECALC ALL ────────────────────────────────────────────
@@ -188,14 +229,16 @@ function recalc() {
     const rid = el.id.replace('room-', '');
     const walls = getRoomWalls(rid);
     let roomSqft = 0, roomAmt = 0;
-    walls.forEach(w => { roomSqft += w.sqft; roomAmt += w.amt; });
-    grandSqft += roomSqft;
-    grandTotal += roomAmt;
 
     walls.forEach(w => {
+      roomSqft += w.sqft;
+      roomAmt += w.amt;
       const amtEl = document.getElementById(`wamt-${rid}-${w.wid}`);
       if (amtEl) amtEl.textContent = 'Rs. ' + w.amt.toFixed(2);
     });
+
+    grandSqft += roomSqft;
+    grandTotal += roomAmt;
 
     const rtEl = document.getElementById(`rtotal-${rid}`);
     const rsEl = document.getElementById(`rsqft-${rid}`);
@@ -217,6 +260,8 @@ function recalc() {
         <span class="sum-room-amt">Rs. ${r.amt.toFixed(2)}</span>
       </div>`).join('') || '';
   }
+
+  updateBalance();
 }
 
 // ── GATHER DATA ───────────────────────────────────────────
@@ -236,7 +281,8 @@ function gatherData() {
   return {
     name: document.getElementById('cust-name').value,
     phone: document.getElementById('cust-phone').value,
-    quoteNo: document.getElementById('quote-no').value,
+    address: document.getElementById('cust-address').value,
+    advance: parseFloat(document.getElementById('advance-amount')?.value) || 0,
     date: new Date().toLocaleDateString('en-IN'),
     rooms
   };
@@ -248,39 +294,92 @@ function showBill() {
   let grandSqft = 0, grandTotal = 0;
   data.rooms.forEach(r => { grandSqft += r.roomSqft; grandTotal += r.roomAmt; });
 
+  const advance = data.advance || 0;
+  const balance = grandTotal - advance;
+  const balanceColor = balance < 0 ? 'var(--red)' : '#0c7e52';
+  const balanceLabel = balance < 0 ? 'Overpaid' : 'Balance Due';
+
+  // Table rows — include Pattern Name & Number column
   const rows = data.rooms.flatMap(r =>
-    r.walls.map(w => `
-      <tr>
-        <td>${r.category}</td>
-        <td>Wall ${w.wid}</td>
-        <td>${r.roomPaper}</td>
-        <td>${w.sqft.toFixed(3)}</td>
-        <td>Rs. ${w.rate.toFixed(2)}</td>
-        <td>Rs. ${w.amt.toFixed(2)}</td>
-      </tr>`)
+    r.walls.map(w => {
+      const patternCell = w.patternNum || '—';
+      return `
+        <tr>
+          <td>${r.category}</td>
+          <td>Wall ${w.wid}</td>
+          <td>${r.roomPaper}</td>
+          <td>${patternCell}</td>
+          <td>${w.sqft.toFixed(3)}</td>
+          <td>Rs. ${w.rate.toFixed(2)}</td>
+          <td>Rs. ${w.amt.toFixed(2)}</td>
+        </tr>`;
+    })
   ).join('');
+
+  const logoHtml = `
+    <img src="/img/logo.jpeg" class="bill-logo-img" alt="Logo"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
+    <span class="bill-logo-fallback" style="display:none;">W</span>`;
 
   document.getElementById('bill-content').innerHTML = `
     <div class="bill-header">
-      <div class="bill-co">Wallpaper Studio<small>Professional Quotation</small></div>
+      <div class="bill-co">
+        <div class="bill-logo-wrap">
+          ${logoHtml}
+          <div>Noida Decor<small>Vivek Choudhary</small></div>
+        </div>
+      </div>
       <div class="bill-meta">
-        Quote: <b>${data.quoteNo || '--'}</b><br>
         Date: <b>${data.date}</b><br>
         Customer: <b>${data.name || '--'}</b><br>
-        Phone: <b>${data.phone || '--'}</b>
+        Phone: <b>${data.phone || '--'}</b><br>
+        ${data.address ? `Address: <b>${data.address}</b>` : ''}
       </div>
     </div>
-    <table class="bill-table">
-      <thead><tr>
-        <th>Room</th><th>Wall</th><th>Paper</th><th>Sq Ft</th><th>Rate</th><th>Amount</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <div class="bill-total-box">
-      <div class="bill-total-inner">Grand Total: Rs. ${grandTotal.toFixed(2)}</div>
+
+    <div class="bill-table-wrap">
+      <table class="bill-table">
+        <thead><tr>
+          <th>Room</th>
+          <th>Wall</th>
+          <th>Paper</th>
+          <th>Pattern</th>
+          <th>Sq Ft</th>
+          <th>Rate</th>
+          <th>Amount</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
     </div>
-    <div class="bill-foot">Total Area: ${grandSqft.toFixed(3)} sq ft &nbsp;|&nbsp; Thank you for your business!</div>
+
+    <div class="bill-totals-block">
+      <div class="bill-total-row">
+        <span>Total Area</span>
+        <span>${grandSqft.toFixed(3)} sq ft</span>
+      </div>
+      <div class="bill-total-row grand">
+        <span>Grand Total</span>
+        <span>Rs. ${grandTotal.toFixed(2)}</span>
+      </div>
+      ${advance > 0 ? `
+      <div class="bill-total-row">
+        <span>Advance Paid</span>
+        <span style="color:#0c7e52;">&#8722; Rs. ${advance.toFixed(2)}</span>
+      </div>
+      <div class="bill-total-row" style="font-size:15px;font-weight:700;padding-top:10px;border-top:1.5px solid #e2e6ef;">
+        <span style="color:${balanceColor};">${balanceLabel}</span>
+        <span style="color:${balanceColor};">Rs. ${Math.abs(balance).toFixed(2)}</span>
+      </div>` : ''}
+    </div>
+
+    <div class="bill-payment-terms">
+      <div class="bpt-title">Payment Terms</div>
+      <div class="bpt-row"><span class="bpt-dot"></span><span>50% advance payment required before work begins</span></div>
+      <div class="bpt-row"><span class="bpt-dot"></span><span>Remaining 50% due upon work completion</span></div>
+      <div class="bpt-row"><span class="bpt-dot"></span><span>Thank you for your business!</span></div>
+    </div>
   `;
+
   document.getElementById('bill-modal').classList.add('open');
 }
 
@@ -288,9 +387,91 @@ function closeBill() {
   document.getElementById('bill-modal').classList.remove('open');
 }
 
-// ── TOAST NOTIFICATION ────────────────────────────────────
+// ── PRINT — alag blank page, Back button + Print button ───
+function printBill() {
+  const billHtml = document.getElementById('bill-content').innerHTML;
+  const printWin = window.open('', '_blank');
+  printWin.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <title>Noida Decor — Bill</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Inter',sans-serif;font-size:13px;color:#111827;background:#f4f5f9;}
+    .wrap{max-width:700px;margin:0 auto;padding:14px 14px 40px;}
+    .topbar{
+      display:flex;align-items:center;justify-content:space-between;
+      gap:10px;margin-bottom:14px;
+    }
+    .btn-back{
+      display:inline-flex;align-items:center;gap:6px;
+      padding:10px 18px;
+      background:#fff;color:#0b1e3d;
+      border:1.5px solid #0b1e3d;border-radius:8px;
+      font-size:13px;font-weight:600;font-family:'Inter',sans-serif;
+      cursor:pointer;
+    }
+    .btn-download{
+      display:inline-flex;align-items:center;gap:6px;
+      padding:10px 18px;
+      background:#0b1e3d;color:#fff;
+      border:none;border-radius:8px;
+      font-size:13px;font-weight:600;font-family:'Inter',sans-serif;
+      cursor:pointer;
+    }
+    .bill-box{background:#fff;border-radius:12px;padding:24px 20px;}
+    .bill-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0b1e3d;padding-bottom:14px;margin-bottom:16px;flex-wrap:wrap;gap:10px;}
+    .bill-co{font-size:20px;font-weight:700;color:#0b1e3d;}
+    .bill-co small{display:block;font-size:10px;font-weight:400;color:#9ca3af;margin-top:3px;text-transform:uppercase;letter-spacing:.08em;}
+    .bill-logo-wrap{display:flex;align-items:center;gap:12px;margin-bottom:4px;}
+    .bill-logo-img{width:48px;height:48px;border-radius:8px;object-fit:cover;border:1px solid #e2e6ef;}
+    .bill-logo-fallback{width:48px;height:48px;border-radius:8px;background:#c9a84c;color:#0b1e3d;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;}
+    .bill-meta{font-size:12px;color:#4b5563;line-height:2;}
+    .bill-table-wrap{width:100%;overflow-x:auto;margin-bottom:14px;}
+    .bill-table{width:100%;min-width:420px;border-collapse:collapse;font-size:12px;}
+    .bill-table th{background:#0b1e3d;color:#fff;padding:9px 10px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;}
+    .bill-table th:last-child{text-align:right;}
+    .bill-table td{padding:9px 10px;border-bottom:1px solid #eef0f7;font-size:12px;white-space:nowrap;}
+    .bill-table td:last-child{text-align:right;font-weight:700;}
+    .bill-table tr:last-child td{border-bottom:none;}
+    .bill-table tr:nth-child(even) td{background:#f8f9fd;}
+    .bill-totals-block{background:#f8f9fd;border:1px solid #e2e6ef;border-radius:8px;padding:14px 16px;margin-top:12px;display:flex;flex-direction:column;gap:10px;}
+    .bill-total-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#4b5563;}
+    .bill-total-row.grand{font-size:16px;font-weight:700;color:#0b1e3d;padding-top:10px;border-top:1.5px solid #e2e6ef;}
+    .bill-payment-terms{margin-top:16px;border-top:1.5px dashed #cdd2e0;padding-top:14px;}
+    .bpt-title{font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;}
+    .bpt-row{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:#4b5563;margin-bottom:6px;line-height:1.5;}
+    .bpt-row:last-child{margin-bottom:0;}
+    .bpt-dot{width:6px;height:6px;background:#c9a84c;border-radius:50%;flex-shrink:0;margin-top:5px;}
+    @media print{
+      @page{margin:8mm;}
+      body{background:#fff;}
+      .topbar{display:none!important;}
+      .wrap{padding:0;}
+      .bill-box{border-radius:0;padding:0;}
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <button class="btn-back" onclick="window.close()">&#8592; Back</button>
+    <button class="btn-download" onclick="window.print()">&#8595; Download / Print</button>
+  </div>
+  <div class="bill-box">
+    ${billHtml}
+  </div>
+</div>
+</body>
+</html>`);
+  printWin.document.close();
+}
+
+// ── TOAST ─────────────────────────────────────────────────
 function showToast(message, type = 'success') {
-  // Remove existing toast if any
   const existing = document.getElementById('toast');
   if (existing) existing.remove();
 
@@ -298,27 +479,17 @@ function showToast(message, type = 'success') {
   toast.id = 'toast';
   toast.textContent = message;
   toast.style.cssText = `
-    position: fixed;
-    bottom: 28px;
-    left: 50%;
-    transform: translateX(-50%) translateY(20px);
-    background: ${type === 'success' ? '#0b1e3d' : '#be123c'};
-    color: #fff;
-    padding: 12px 24px;
-    border-radius: 50px;
-    font-size: 13px;
-    font-weight: 600;
-    font-family: 'Inter', sans-serif;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.22);
-    z-index: 9999;
-    opacity: 0;
-    transition: opacity 0.25s ease, transform 0.25s ease;
-    pointer-events: none;
-    white-space: nowrap;
+    position:fixed;bottom:28px;left:50%;
+    transform:translateX(-50%) translateY(20px);
+    background:${type === 'success' ? '#0b1e3d' : '#be123c'};
+    color:#fff;padding:12px 24px;border-radius:50px;
+    font-size:13px;font-weight:600;font-family:'Inter',sans-serif;
+    box-shadow:0 8px 24px rgba(0,0,0,0.22);z-index:9999;
+    opacity:0;transition:opacity 0.25s ease,transform 0.25s ease;
+    pointer-events:none;white-space:nowrap;max-width:90vw;text-align:center;
   `;
   document.body.appendChild(toast);
 
-  // Animate in
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       toast.style.opacity = '1';
@@ -326,7 +497,6 @@ function showToast(message, type = 'success') {
     });
   });
 
-  // Animate out after 2.5s
   setTimeout(() => {
     toast.style.opacity = '0';
     toast.style.transform = 'translateX(-50%) translateY(10px)';
@@ -342,11 +512,12 @@ function saveQuote() {
   data.grandTotal = grandTotal;
   data.savedAt = new Date().toISOString();
   data.id = Date.now();
+
   const h = JSON.parse(localStorage.getItem('wq2_history') || '[]');
   h.unshift(data);
   localStorage.setItem('wq2_history', JSON.stringify(h.slice(0, 20)));
   renderHistory();
-  showToast('✓ Quote saved successfully!');
+  showToast('Quote saved successfully!');
 }
 
 // ── HISTORY ───────────────────────────────────────────────
@@ -363,7 +534,7 @@ function renderHistory() {
       <div class="hist-right">
         <div class="hist-amt">Rs. ${(q.grandTotal || 0).toFixed(2)}</div>
         <div class="hist-btns">
-          <button class="hbtn" onclick="loadQuote(${q.id})">Load</button>
+          <button class="hbtn"     onclick="loadQuote(${q.id})">Load</button>
           <button class="hbtn hbtn-del" onclick="deleteQuote(${q.id})">Delete</button>
         </div>
       </div>
@@ -377,8 +548,10 @@ function loadQuote(id) {
   clearAll(true);
   document.getElementById('cust-name').value = q.name || '';
   document.getElementById('cust-phone').value = q.phone || '';
-  document.getElementById('quote-no').value = q.quoteNo || '';
+  document.getElementById('cust-address').value = q.address || '';
+  document.getElementById('advance-amount').value = q.advance || '';
   q.rooms.forEach(r => addRoom(r));
+  updateBalance();
 }
 
 function deleteQuote(id) {
@@ -395,13 +568,13 @@ function clearAll(silent) {
   if (!silent) {
     document.getElementById('cust-name').value = '';
     document.getElementById('cust-phone').value = '';
-    document.getElementById('quote-no').value = '';
+    document.getElementById('cust-address').value = '';
+    document.getElementById('advance-amount').value = '';
   }
   recalc();
 }
 
 // ── INIT ──────────────────────────────────────────────────
-// Date automatically updates every time the page is opened — no hardcoding
 document.getElementById('today-date').textContent = new Date().toLocaleDateString('en-IN', {
   weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
 });
